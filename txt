@@ -1,0 +1,182 @@
+hostnamectl set-hostname isp.au-team.irpo; exec bash
+nano /etc/sysctl.conf
+#net.ipv4.ip_forward=1
+net.ipv4.ip_forward=1
+iptables –t nat –A POSTROUTING –j MASQUERADE
+apt install iptables-persistent
+apt netfilter-persistetn save
+useradd sshuser -u 1010 -U 
+passwd sshuser
+P@ssw0rd
+usermod –aG sudo sshuser
+visudo
+sshuser ALL=NOPASSWD: ALL
+useradd net_admin -U
+passwd net_admin
+P@$$word 
+usermod –aG sudo net_admin
+net_admin ALL=(ALL) NOPASSWD: ALL 
+apt-get update
+apt-get install openvswitch-switch
+systemctl enable --now openvswitch-switch
+ovs-vsctl add-br hq-sw
+ovs-vsctl add-port hq-sw ens4 tag=100
+ovs-vsctl add-port hq-sw ens5 tag=200
+ovs-vsctl add-port hq-sw ens6 tag=999
+ovs-vsctl add-port hq-sw vlan100 tag=100 -- set interface vlan100 type=internal
+ovs-vsctl add-port hq-sw vlan200 tag=200 -- set interface vlan200 type=internal
+ovs-vsctl add-port hq-sw vlan999 tag=999 -- set interface vlan999 type=internal
+systemctl restart openvswitch-switch-
+systemctl restart NetworkManager
+ip link set hq-sw up
+ip a add 192.168.100.1/26 dev vlan100
+ip a add 192.168.100.65/28 dev vlan200
+ip a add 192.168.100.81/29 dev vlan999
+ip link set vlan100 up
+ip link set vlan200 up
+ip link set vlan999 up
+ping 192.168.100.65
+apt install policycoreutils selinux-policy-default selinux-basics
+selinux-activate
+reboot
+sestatus
+semanage port -a -t ssh_port_t -p tcp 2024
+setenforce 0
+ apt install openssh-server
+nano /etc/ssh/sshd_config
+#Port 22
+Port 2024
+AllowUsers sshuser
+#MaxAuthTries 6
+MaxAuthTries 2
+#Banner none
+Banner /etc/ssh-banner 
+nano /etc/ssh-banner
+
+systemctl restart sshd
+ssh sshuser@192.168.100.2 –p 2024
+Настройка гре, после найтройки команда нижена BR-rtr и HQ-rtr
+nmcli connection modify tun1 ip-tunnel.ttl 64
+nmcli connection modify tun1 ip-tunnel.ttl 64
+apt install frr
+nano /etc/frr/daemons
+ospfd = yes
+systemctl enable --now frr
+systemctl restart frr
+vtysh
+hq-rtr.au-team.irpo# configure terminal
+hq-rtr.au-team.irpo(config)# router ospf
+hq-rtr.au-team.irpo(config)# router-id 1.1.1.1
+hq-rtr.au-team.irpo(config-router)# passive-interface default
+hq-rtr.au-team.irpo(config-router)# network 192.168.100.0/26 area 0
+hq-rtr.au-team.irpo(config-router)# network 192.168.100.64/28 area 0
+hq-rtr.au-team.irpo(config-router)# network 10.10.0.0/30 area 0
+area 0 authentication
+hq-rtr.au-team.irpo(config-if)# no passive-interface tun1tterface tun1
+hq-rtr.au-team.irpo(config-router)# exit
+hq-rtr.au-team.irpo(config)# interface tun1
+hq-rtr.au-team.irpo(config-if)# no ip ospf network broadcast
+ip ospf authentication
+ip ospf authentication-key password
+hq-rtr.au-team.irpo(config-if)# exit
+hq-rtr.au-team.irpo(config)# exit
+hq-rtr.au-team.irpo# write
+hq-rtr.au-team.irpo# exit
+:systemctl restart frr
+apt install frr
+nano /etc/frr/daemons
+ospfd = yes
+systemctl enable --now frr
+systemctl restart frr
+vtysh
+br-rtr.au-team.irpo# configure terminal
+br-rtr.au-team.irpo(config)# router ospf
+br-rtr.au-team.irpo(config)# router-id 2.2.2.2
+br-rtr.au-team.irpo(config-router)# passive-interface default
+br-rtr.au-team.irpo(config-router)# network 192.168.200.0/27 area 0
+br-rtr.au-team.irpo(config-router)# network 10.10.0.0/30 area 0
+area 0 authentication
+br-rtr.au-team.irpo(config-if)# no passive-interface tun1tterface tun1
+br-rtr.au-team.irpo(config-router)# exit
+br-rtr.au-team.irpo(config)# interface tun1
+br-rtr.au-team.irpo(config-if)# no ip ospf network broadcast
+ip ospf authentication
+ip ospf authentication-key password
+br-rtr.au-team.irpo(config-if)# exit
+br-rtr.au-team.irpo(config)# exit
+br-rtr.au-team.irpo# write
+br-rtr.au-team.irpo# exit
+systemctl restart frr
+vtysh
+show running-config
+
+apt install isc-dhcp-server
+nano /etc/default/isc-dhcp-server
+INTERFACESv4=”vlan200”
+nano /etc/dhcp/dhcpd.conf
+ 
+ 
+systemctl enable --now isc-dhcp-server
+systemctl restart isc-dhcp-server
+systemctl status isc-dhcp-server
+ 
+еперь входим на HQ-CLI и переводим наш интерфейс ens3 (HQ-RTR_HQ-CLI) в автоматический режим.(IPv4 CONFIGURATION <Automatic>)
+Перезапускаем интерфейс. Если все удачно осуществится подключение.
+apt install bind9
+nano /etc/bind/named.conf.options
+По умолчанию он будет выглядеть так:
+ 
+
+
+Листаем вниз и приводим файл к такому виду:
+ 
+
+Полностью строка listen-on port 
+listen-on port 53 { 127.0.0.1; 192.168.100.0/26; 192.168.100.64/28; 192.168.200.0/27; }
+nano /etc/bind/named.conf.local
+ 
+Проверяем наличие ошибок в конфигах командой named-checkconf
+Если вывод пустой, значит все ок.
+mkdir /etc/bind/zones
+В качестве основы для файла зоны прямого просмотра можно использовать файл зоны db.local. Скопируем его в нужное место:
+sudo cp /etc/bind/db.local /etc/bind/zones/au-team.db
+Открываем в редакторе: nano /etc/bind/zones/au-team.db
+Приводим файл к такому виду:
+ 
+
+Сохраняем: Ctrl+X, y, Enter. 
+
+Создадим зону обратного просмотра
+cp /etc/bind/db.127 /etc/bind/zones/au-team_rev.db
+Отредактируем файл
+nano /etc/bind/zones/au-team_rev.db 
+Его нужно привести к такому виду:
+ 
+Назначаем владельца и права.
+chown -R root /etc/bind/zones
+chown 0640 /etc/bind/zones/*
+Также создаем папку master
+mkdir /var/cache/bind/master
+И копируем туда наши зоны
+cp /etc/bind/zones/au-team.db /var/cache/bind/master
+cp /etc/bind/zones/au-team_rev.db /var/cache/bind/master
+С помощью утилиты named-checkconf -z проверяется наличие ошибок в конфигурационном файле и файлах зон.
+
+ 
+Теперь в DNS-сервере HQ_RTR_HQ-SRV укажем 192.168.100.2.
+ 
+На BR-SRV в DNS-сервере на BR-RTR_BR-SRV также укажем 192.168.100.2.
+ 
+Добавим DNS-сервер в автозагрузку
+systemctl enable --now bind9
+Перезагрузим службу
+systemctl restart bind9
+Проверим работоспособность нашего DNS-сервера. Пинганем с BR-SRV домен au-team.irpo.
+ 
+Все работает. Домен разрешается как 192.168.100.2.
+Теперь просмотрим хосты командой host.
+ 
+ 
+Также можно воспользоваться командой lookup или пингануть по доменному имени.
+timedatectl set-timezone Asia/Krasnoyarsk
+timedatectl
